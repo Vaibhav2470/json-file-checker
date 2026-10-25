@@ -1,23 +1,37 @@
 import { relative } from 'node:path';
-import { checkPaths } from '../src/check-json.mjs';
+import { checkPaths, isDirectoryName } from '../src/check-json.mjs';
 
-const usage = `Usage: node bin/check-json.mjs <file-or-directory> [...paths]
+const usage = `Usage: node bin/check-json.mjs [--exclude <directory-name>] <file-or-directory> [...paths]
 
 Validate .json syntax without modifying files. Directories are scanned recursively,
 excluding .git and node_modules. Symbolic links are not followed.
+Repeat --exclude <directory-name> to skip additional nested directories.
+Exclusions match exact, case-sensitive names, not paths or glob patterns.
+Explicitly supplied input paths are always inspected.
 Use -- before a path beginning with a hyphen.
 
 Exit codes: 0 = valid, 1 = invalid JSON, 2 = usage, IO error, or no JSON files.
 `;
 
 const inputs = [];
+const excludeDirectories = [];
+const args = process.argv.slice(2);
 let positionalOnly = false;
-for (const argument of process.argv.slice(2)) {
+for (let index = 0; index < args.length; index += 1) {
+  const argument = args[index];
   if (!positionalOnly && argument === '--') {
     positionalOnly = true;
   } else if (!positionalOnly && (argument === '--help' || argument === '-h')) {
     process.stdout.write(usage);
     process.exit(0);
+  } else if (!positionalOnly && argument === '--exclude') {
+    const name = args[index + 1];
+    if (!isDirectoryName(name) || name.startsWith('-') || /[*?\[\]{}]/.test(name)) {
+      process.stderr.write('Expected a directory name after --exclude (no paths or patterns).\n');
+      process.exit(2);
+    }
+    excludeDirectories.push(name);
+    index += 1;
   } else if (!positionalOnly && argument.startsWith('-')) {
     process.stderr.write(`Unknown option: ${argument}\n${usage}`);
     process.exit(2);
@@ -32,7 +46,7 @@ if (inputs.length === 0) {
 }
 
 try {
-  const result = await checkPaths(inputs);
+  const result = await checkPaths(inputs, { excludeDirectories });
   const display = (path) => relative(process.cwd(), path) || '.';
   for (const path of result.invalid) {
     console.error(`INVALID ${JSON.stringify(display(path))}: invalid JSON syntax.`);

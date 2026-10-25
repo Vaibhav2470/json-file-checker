@@ -26,12 +26,19 @@ No `npm install` step is needed. You can also use `npm run check -- examples/val
 node bin/check-json.mjs ../my-project
 node bin/check-json.mjs ../my-project/package.json ../my-project/config
 node bin/check-json.mjs "../project with spaces/config.json"
+node bin/check-json.mjs --exclude build --exclude coverage ../my-project
 ```
 
 Directories are scanned recursively for `.json` files (case-insensitive).
 Nested `.git` and `node_modules` directories are skipped. Overlapping input paths
 are checked once, and symbolic links are not followed. Explicitly supplying a
 symlink is an error. Use `--` before a filename starting with a hyphen.
+
+Use repeated `--exclude <directory-name>` options to skip additional generated
+folders at any depth. Names are exact and case-sensitive; paths and glob patterns
+are not supported. The built-in exclusions remain in effect. An explicitly
+supplied file or directory is still inspected, even when its name matches an
+exclusion. If the scan finds no JSON files, it exits with code `2`.
 
 Files are read as UTF-8, and a leading UTF-8 byte-order mark is accepted. All JSON
 values are supported, including arrays and scalars. The checker never rewrites
