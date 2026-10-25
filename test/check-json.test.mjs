@@ -67,6 +67,69 @@ test('deduplicates overlapping directory and file arguments', async (t) => {
   assert.deepEqual((await checkPaths([root, join(root, 'nested'), path, path])).valid, [path]);
 });
 
+test('supports repeated directory exclusions at any depth without excluding same-named files', async (t) => {
+  const root = await fixture(t, {
+    'config.json': '{}', 'build/bad.json': 'bad',
+    'nested/build/bad.json': 'bad', 'coverage/bad.json': 'bad',
+    'node_modules/bad.json': 'bad', '.git/bad.json': 'bad',
+    'build.json': '{}', 'nested/good.json': '{}',
+  });
+  const without = run(root, ['.']);
+  assert.equal(without.status, 1);
+  const result = run(root, ['--exclude', 'build', '.', '--exclude', 'coverage']);
+  assert.equal(result.status, 0);
+  assert.match(result.stdout, /3 valid, 0 invalid, 0 error/);
+  assert.equal(result.stderr, '');
+});
+
+test('does not silently exclude explicitly requested files or directories', async (t) => {
+  const root = await fixture(t, { 'build/bad.json': 'bad', 'config.json': '{}' });
+  assert.equal(run(root, ['--exclude', 'build', '.']).status, 0);
+  assert.equal(run(root, ['--exclude', 'build', 'build']).status, 1);
+  assert.equal(run(root, ['--exclude', 'build', 'build/bad.json']).status, 1);
+});
+
+test('custom exclusions also work through the API and preserve default exclusions', async (t) => {
+  const root = await fixture(t, {
+    'good.json': '{}', 'generated/bad.json': 'bad',
+    'node_modules/bad.json': 'bad', '.git/bad.json': 'bad',
+  });
+  const result = await checkPaths([root], { excludeDirectories: ['generated'] });
+  assert.deepEqual(result.valid, [join(root, 'good.json')]);
+  assert.deepEqual(result.invalid, []);
+  assert.deepEqual(result.errors, []);
+  await assert.rejects(checkPaths([root], { excludeDirectories: 'generated' }), TypeError);
+  await assert.rejects(checkPaths([root], { excludeDirectories: ['../generated'] }), TypeError);
+});
+
+test('rejects missing exclusion values, paths, blank values and glob patterns', async (t) => {
+  const root = await fixture(t, { 'good.json': '{}' });
+  for (const args of [
+    ['--exclude'], ['--exclude', '--help', '.'], ['--exclude', '', '.'],
+    ['--exclude', ' ', '.'], ['--exclude', '.', '.'], ['--exclude', '..', '.'],
+    ['--exclude', 'build/nested', '.'], ['--exclude', 'build\\nested', '.'],
+    ['--exclude', 'build*', '.'], ['--exclude', '[abc]', '.'],
+  ]) {
+    const result = run(root, args);
+    assert.equal(result.status, 2, JSON.stringify(args));
+    assert.match(result.stderr, /Expected a directory name/);
+  }
+});
+
+test('matches exact case-sensitive directory names and preserves -- argument handling', async (t) => {
+  const root = await fixture(t, { 'generated/bad.json': 'bad', '--exclude.json': '{}' });
+  assert.equal(run(root, ['--exclude', 'Generated', '.']).status, 1);
+  assert.equal(run(root, ['--exclude', 'generated', '.']).status, 0);
+  assert.equal(run(root, ['--', '--exclude.json']).status, 0);
+});
+
+test('an exclusion that removes all candidate files does not report success', async (t) => {
+  const root = await fixture(t, { 'generated/bad.json': 'bad' });
+  const result = run(root, ['--exclude', 'generated', '.']);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /No JSON files were checked/);
+});
+
 test('returns exit 0 for valid JSON and leaves contents unchanged', async (t) => {
   const contents = '\uFEFF{ "answer": 42 }\n';
   const root = await fixture(t, { 'config with spaces.json': contents });

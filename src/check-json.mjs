@@ -1,10 +1,19 @@
 import { lstat, readFile, readdir } from 'node:fs/promises';
 import { extname, join, resolve } from 'node:path';
 
-const excludedDirectories = new Set(['.git', 'node_modules']);
+const defaultExcludedDirectories = ['.git', 'node_modules'];
+
+export function isDirectoryName(value) {
+  return typeof value === 'string' && value.trim().length > 0 &&
+    value !== '.' && value !== '..' && !/[\\/\u0000]/.test(value);
+}
 
 /** Validate syntax only. File contents and parser excerpts never leave this function. */
-export async function checkPaths(inputs) {
+export async function checkPaths(inputs, { excludeDirectories = [] } = {}) {
+  if (!Array.isArray(excludeDirectories) || !excludeDirectories.every(isDirectoryName)) {
+    throw new TypeError('Exclusions must be directory names, not paths or patterns.');
+  }
+  const excludedDirectories = new Set([...defaultExcludedDirectories, ...excludeDirectories]);
   const result = { valid: [], invalid: [], errors: [] };
   const files = new Set();
   const directories = new Set();
