@@ -1,0 +1,12 @@
+{
+  "name": "@vaibhav2470/json-file-checker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Read-only JSON syntax validation for files and directories.",
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "check": "node bin/check-json.mjs",
+    "test": "node --test"
+  }
+}
