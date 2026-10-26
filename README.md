@@ -53,6 +53,54 @@ files and does not print file contents or parser excerpts in error messages.
 Operational errors take precedence over syntax failures. Other readable inputs
 are still checked when one path fails.
 
+## Machine-readable reports
+
+Use `--format json` when a CI job or another program needs structured results:
+
+```sh
+node bin/check-json.mjs --format json examples/valid.json
+```
+
+The command emits one JSON object to stdout, including on validation or file-access
+failures. Validation diagnostics are included in that object, so stderr is empty.
+The process still returns the exit codes above; a parseable report alone does not
+mean the check succeeded.
+
+```json
+{
+  "schemaVersion": 1,
+  "summary": { "checked": 1, "valid": 1, "invalid": 0, "errors": 0 },
+  "valid": ["examples/valid.json"],
+  "invalid": [],
+  "errors": []
+}
+```
+
+Paths are relative to the working directory and use the operating system's path
+separator (`/` on Linux, `\\` on Windows). `valid` and `invalid` contain path
+strings. `errors` contains objects with `path` and a safe `message`. `checked`
+counts files successfully read and parsed or rejected, excluding file-access
+errors. An empty scan reports all-zero counts but still exits with code `2`.
+No configuration contents or parser excerpts are included. Help and invalid
+command-line arguments still use text output; choose `--format text` to explicitly
+select the default output format.
+
+For example, a Node.js script in this repository can consume the report without
+discarding the checker's failure status:
+
+```js
+import { spawnSync } from 'node:child_process';
+
+const child = spawnSync(process.execPath,
+  ['bin/check-json.mjs', '--format', 'json', '.'], { encoding: 'utf8' });
+if (child.error) throw child.error;
+if (child.status === null) throw new Error('JSON checker did not exit normally');
+if (!child.stdout.trim()) throw new Error(child.stderr || 'No report received');
+const report = JSON.parse(child.stdout);
+console.log(`${report.summary.invalid} invalid files, ${report.summary.errors} errors`);
+process.exitCode = child.status;
+```
+
 ## Development and verification
 
 ```sh
